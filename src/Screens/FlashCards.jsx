@@ -1,14 +1,17 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, Button, StyleSheet, TouchableOpacity, Image} from 'react-native';
-import * as FileSystem from 'expo-file-system';
+import * as SQLite from 'expo-sqlite';
 import { useNavigation } from '@react-navigation/native';
 
-const filePath = `${FileSystem.documentDirectory}flash_card_set.json`;
+//GET
+
+//Remove == DELETE
+//upload to local repositories, and save the local imageUris.
+//if user saves the images obtained from online, download it and save it to local storage.
 
 export default function FlashCards () {
     // Destructure the parameters passed from the Questions screen
-    const labelLists = useRef([]);
-    const items = useRef([]);
+    const [pics, setPics] = useState([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [startFlashCard, setStartFlashCard] = useState(false);
     const [component, setComponent] = useState(null);
@@ -17,38 +20,18 @@ export default function FlashCards () {
     const [cardSet, setCardSet] = useState(false); 
     const navigation = useNavigation();
 
-    const readJsonFile = async () => {
-        try {
-            const content = await FileSystem.readAsStringAsync(filePath);
-            return JSON.parse(content);
-        } catch (error) {
-            console.error('Error reading JSON file:', error);
-            return {}; // Return an empty object if reading fails
-        }
-    };
-    const checkFileExists = async () => {
-        try {
-            const info = await FileSystem.getInfoAsync(filePath);
-            return info.exists;
-        } catch (error) {
-            console.error('Error checking file existence:', error);
-            return false;
-        }
-    };
-
     useEffect(() => {
         const unsubscribe = navigation.addListener('focus', () => {
             const fetchData = async () => {
                 try {
-                    const condition = await checkFileExists();
-                    if (condition) {
-                        items.current = await readJsonFile();
-                        labelLists.current = Object.keys(items.current);
-                        setStartFlashCard(true);
-
-                    } else {
-                        console.log('File cannot be found.');
-                    }
+                    const database = await SQLite.openDatabaseAsync('pics');
+                    await database.execAsync(`
+                        PRAGMA journal_mode = WAL;
+                        CREATE TABLE IF NOT EXISTS pics (id INTEGER PRIMARY KEY NOT NULL, label TEXT NOT NULL, uri TEXT NOT NULL);
+                    `);
+                    setPics(await database.getAllAsync('SELECT * FROM pics'));
+                    console.log(pics);
+                    setStartFlashCard(true);
                 } catch (error) {
                     console.error('Error fetching file content:', error);
                 }
@@ -93,8 +76,13 @@ export default function FlashCards () {
         if (startFlashCard) {
             console.log(currentIndex);
             console.log('1', startFlashCard);
-            currentItem.current = {'imageUrl': items.current[labelLists.current[currentIndex]].imageUrl,
-                                    'label': labelLists.current[currentIndex]};
+            try {
+                currentItem.current = {'imageUrl': pics[currentIndex].uri,
+                                    'label': pics[currentIndex].label};
+            } catch (error) {
+                console.log(currentIndex, error);
+                console.log(pics);
+            }
             console.log(currentItem.current);
             setCardSet(true);
             setComponent(<TouchableOpacity onPress = {() => setFlip(true)}>
@@ -104,7 +92,7 @@ export default function FlashCards () {
     }, [currentIndex, startFlashCard])
 
     const moveCard = () => {
-        if (currentIndex === labelLists.current.length - 1) {
+        if (currentIndex >= pics.length - 1) {
             setCurrentIndex(0); 
         }
         else {

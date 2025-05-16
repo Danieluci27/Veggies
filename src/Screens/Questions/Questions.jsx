@@ -3,7 +3,7 @@ import { SafeAreaView, View, Text, TextInput, Image, Button, Alert, StyleSheet, 
 import { useNavigation } from '@react-navigation/native';
 import SearchImageUrl from './Search';
 import Modal from 'react-native-modal';
-import * as FileSystem from 'expo-file-system';
+import * as SQLite from 'expo-sqlite';
 
 export default function Questions({ route }) {
     const type = route.params?.message;
@@ -104,64 +104,23 @@ export default function Questions({ route }) {
     }
 
 const SaveToFlashCards = async () => {
-    try {// Call your modal handler
-        const filePath = `${FileSystem.documentDirectory}flash_card_set.json`;
-
-        // Check if the file exists
-        const checkFileExists = async (filePath) => {
-            try {
-                const info = await FileSystem.getInfoAsync(filePath);
-                return info.exists;
-            } catch (error) {
-                console.error('Error checking file existence:', error);
-                return false;
-            }
-        };
-
-
-        // Read JSON from the file
-        const readJsonFile = async (filePath) => {
-            try {
-                const content = await FileSystem.readAsStringAsync(filePath);
-                return JSON.parse(content);
-            } catch (error) {
-                console.error('Error reading JSON file:', error);
-                return {}; // Return an empty object if reading fails
-            }
-        };
-
-        // Write JSON to the file
-        const writeJsonFile = async (filePath, data) => {
-            try {
-                const jsonString = JSON.stringify(data, null, 2);
-                await FileSystem.writeAsStringAsync(filePath, jsonString);
-                console.log('File written successfully!');
-            } catch (error) {
-                console.error('Error writing JSON file:', error);
-            }
-        };
-
-        let fileContent = {};
-
-        // Check if the file exists and read its content if it does
-        if (await checkFileExists(filePath)) {
-            fileContent = await readJsonFile(filePath);
-        }
-
-        // Add or update the flashcard content
-        console.log(additionalNote.current);
-        fileContent[currentItem.label] = {'imageUrl': currentItem.imageUrl, 'note': additionalNote.current};
-
-        // Write the updated content back to the file
-        await writeJsonFile(filePath, fileContent);
-
+    try {
+        const database = await SQLite.openDatabaseAsync('pics');
+        await database.execAsync(`
+            PRAGMA journal_mode = WAL;
+            CREATE TABLE IF NOT EXISTS pics (id INTEGER PRIMARY KEY NOT NULL, label TEXT, uri TEXT);
+        `);
+        const result = await database.runAsync("INSERT INTO pics (label, uri) VALUES (?, ?)", [
+            currentItem.label,
+            currentItem.imageUrl
+        ]);
+        console.log(result.lastInsertRowId, result.changes);
         console.log('Flashcard saved successfully!');
     } catch (error) {
         console.error('Error saving flashcard:', error);
     }
 };
 const Complete = async ({note}) => {
-    console.log('hello bitch');
     handleSaveModal();
     additionalNote.current = note; 
     SaveToFlashCards();
@@ -198,7 +157,6 @@ const Complete = async ({note}) => {
 
     const SaveModal = () => {
             const [note, setNote] = useState(''); 
-            console.log('hello motherfucker');
             return (
                 <Modal
                     isVisible={isSaveModalVisible}
